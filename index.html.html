@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>🇫🇷 유럽 미션 게임판</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap');
+  :root {
+    --bg:#0f0f1a;--surface:#1a1a2e;--surface2:#16213e;--border:rgba(255,255,255,0.08);
+    --orange:#ff6b35;--yellow:#ffd700;--mint:#4ecdc4;--pink:#ff6b9d;
+    --purple:#a855f7;--blue:#3b82f6;--text:#f0f0f0;--muted:#888;--card:#1e1e35;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'Noto Sans KR',sans-serif;min-height:100vh;overflow-x:hidden;-webkit-tap-highlight-color:transparent;}
+
+  /* HEADER */
+  .header{background:linear-gradient(135deg,#1a0a2e 0%,#0f1a2e 50%,#1a0a0e 100%);border-bottom:1px solid var(--border);padding:14px 16px 0;position:sticky;top:0;z-index:100;}
+  .header-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+  .header-title{font-size:15px;font-weight:900;display:flex;align-items:center;gap:4px;}
+  .header-title span{color:var(--orange);}
+  .live-dot{display:inline-block;width:7px;height:7px;background:#22c55e;border-radius:50%;animation:pulse 1.5s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.5;transform:scale(1.3)}}
+  .sync-indicator{font-size:9px;color:#22c55e;font-weight:700;margin-left:4px;}
+  .sync-indicator.syncing{color:var(--yellow);}
+  .admin-toggle{display:flex;align-items:center;gap:5px;background:rgba(255,107,53,0.15);border:1px solid var(--orange);border-radius:20px;padding:5px 10px;cursor:pointer;font-size:11px;font-weight:700;color:var(--orange);transition:all 0.2s;white-space:nowrap;}
+  .admin-toggle.active{background:var(--orange);color:white;}
+
+  /* TABS */
+  .tabs{display:flex;gap:3px;overflow-x:auto;scrollbar-width:none;}
+  .tabs::-webkit-scrollbar{display:none;}
+  .tab{padding:9px 12px;border-radius:8px 8px 0 0;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;transition:all 0.2s;color:var(--muted);border:1px solid transparent;border-bottom:none;}
+  .tab.active{background:var(--surface);color:var(--text);border-color:var(--border);}
+
+  /* CONTENT */
+  .content{padding:14px;max-width:600px;margin:0 auto;}
+  .page{display:none;}
+  .page.active{display:block;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:10px;}
+  .card-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;}
+  .section-label{font-size:10px;font-weight:700;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;margin:14px 0 7px;}
+
+  /* LEADERBOARD */
+  .team-row{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:11px;margin-bottom:5px;transition:all 0.4s;}
+  .team-row:nth-child(1){background:linear-gradient(90deg,rgba(255,215,0,0.15),transparent);border:1px solid rgba(255,215,0,0.3);}
+  .team-row:nth-child(2){background:linear-gradient(90deg,rgba(192,192,192,0.12),transparent);border:1px solid rgba(192,192,192,0.2);}
+  .team-row:nth-child(3){background:linear-gradient(90deg,rgba(205,127,50,0.12),transparent);border:1px solid rgba(205,127,50,0.2);}
+  .team-row:nth-child(n+4){background:rgba(255,255,255,0.03);border:1px solid var(--border);}
+  .rank-badge{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;flex-shrink:0;}
+  .rank-1{background:var(--yellow);color:#000;}.rank-2{background:#c0c0c0;color:#000;}.rank-3{background:#cd7f32;color:#fff;}.rank-other{background:rgba(255,255,255,0.08);color:var(--muted);font-size:12px;}
+  .team-info{flex:1;min-width:0;}
+  .team-name{font-weight:800;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .team-members{font-size:10px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .team-score{font-size:18px;font-weight:900;background:linear-gradient(135deg,var(--orange),var(--yellow));-webkit-background-clip:text;-webkit-text-fill-color:transparent;flex-shrink:0;}
+  .team-bar-wrap{height:3px;background:rgba(255,255,255,0.08);border-radius:2px;margin-top:3px;}
+  .team-bar{height:3px;border-radius:2px;transition:width 0.6s ease;}
+
+  /* MISSIONS */
+  .mission-card{border-radius:12px;padding:13px;margin-bottom:9px;border:1px solid var(--border);position:relative;overflow:hidden;}
+  .mission-header{display:flex;align-items:flex-start;gap:9px;margin-bottom:7px;}
+  .mission-emoji{font-size:24px;flex-shrink:0;}
+  .mission-num{font-size:9px;font-weight:700;letter-spacing:1px;padding:2px 7px;border-radius:5px;display:inline-block;margin-bottom:3px;}
+  .mission-title{font-size:14px;font-weight:900;}
+  .mission-meta{font-size:10px;color:var(--muted);margin-top:1px;}
+  .mission-desc{font-size:12px;color:#ccc;line-height:1.6;margin-bottom:7px;}
+  .score-pill{display:inline-block;padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700;background:rgba(255,255,255,0.06);color:var(--muted);margin-right:4px;margin-top:3px;}
+
+  /* SCORE INPUT */
+  .mission-select{width:100%;padding:11px 12px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-size:13px;font-family:inherit;margin-bottom:12px;outline:none;-webkit-appearance:none;}
+  .score-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:12px;}
+  .score-item{display:flex;flex-direction:column;gap:3px;}
+  .score-label{font-size:10px;font-weight:700;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .score-inp{padding:10px 8px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-size:16px;font-family:inherit;text-align:center;outline:none;transition:border 0.2s;width:100%;}
+  .score-inp:focus{border-color:var(--orange);}
+  .btn-primary{width:100%;padding:14px;border-radius:10px;background:linear-gradient(135deg,var(--orange),#ff4500);border:none;color:white;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit;transition:all 0.2s;}
+  .btn-primary:active{transform:scale(0.98);}
+  .btn-secondary{width:100%;padding:12px;border-radius:10px;background:transparent;border:1px solid var(--border);color:var(--muted);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:8px;transition:all 0.2s;}
+  .btn-secondary:active{border-color:var(--orange);color:var(--orange);}
+
+  /* TOURNAMENT */
+  .bracket{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:8px;}
+  .bracket-inner{display:flex;gap:5px;min-width:480px;align-items:flex-start;padding:4px;}
+  .round{display:flex;flex-direction:column;flex:1;min-width:100px;}
+  .round-title{font-size:9px;font-weight:700;color:var(--muted);text-align:center;letter-spacing:1px;margin-bottom:6px;text-transform:uppercase;}
+  .matches{display:flex;flex-direction:column;gap:5px;}
+  .match{background:var(--surface2);border:1px solid var(--border);border-radius:7px;overflow:hidden;}
+  .match-team{padding:7px 8px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:space-between;cursor:pointer;transition:all 0.15s;user-select:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .match-team:first-child{border-bottom:1px solid var(--border);}
+  .match-team:active{background:rgba(255,255,255,0.06);}
+  .match-team.winner{background:rgba(255,215,0,0.15);color:var(--yellow);}
+  .match-team.loser{color:rgba(255,255,255,0.25);}
+  .match-team.tbd{color:rgba(255,255,255,0.2);font-style:italic;font-size:10px;}
+  .champion-box{background:linear-gradient(135deg,rgba(255,215,0,0.2),rgba(255,107,53,0.2));border:2px solid var(--yellow);border-radius:10px;padding:12px 8px;text-align:center;flex-shrink:0;width:80px;}
+  .champion-crown{font-size:22px;display:block;margin-bottom:3px;}
+  .champion-name{font-size:10px;font-weight:900;color:var(--yellow);word-break:keep-all;}
+
+  /* MISC */
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--orange);color:white;padding:10px 20px;border-radius:30px;font-weight:700;font-size:13px;transition:transform 0.3s;z-index:999;white-space:nowrap;}
+  .toast.show{transform:translateX(-50%) translateY(0);}
+  .summary-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px;}
+  .summary-row:last-child{border:none;}
+  .locked-msg{text-align:center;padding:36px 20px;}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-top">
+    <div class="header-title">
+      <span class="live-dot"></span>🇫🇷 유럽 미션 <span>게임판</span>
+      <span class="sync-indicator" id="syncIndicator">● LIVE</span>
+    </div>
+    <div class="admin-toggle" id="adminToggle" onclick="toggleAdmin()">⚙️ 운영진</div>
+  </div>
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('leaderboard')">🏆 순위</div>
+    <div class="tab" onclick="switchTab('missions')">📋 미션</div>
+    <div class="tab" onclick="switchTab('score')">✏️ 점수입력</div>
+    <div class="tab" onclick="switchTab('tournament')">✂️ 토너먼트</div>
+  </div>
+</div>
+
+<div class="content">
+  <div class="page active" id="page-leaderboard">
+    <div class="section-label">실시간 순위 (자동 갱신)</div>
+    <div class="card" id="leaderboardList"><div style="text-align:center;padding:30px;color:var(--muted)">⏳ 불러오는 중...</div></div>
+    <div class="section-label">미션 완료 현황</div>
+    <div class="card" id="missionProgress"></div>
+  </div>
+
+  <div class="page" id="page-missions"></div>
+
+  <div class="page" id="page-score">
+    <div id="scoreLockedMsg" class="card locked-msg">
+      <div style="font-size:36px;margin-bottom:10px">🔒</div>
+      <div style="font-weight:700;font-size:15px;margin-bottom:6px">운영진 전용</div>
+      <div style="color:var(--muted);font-size:13px">우측 상단 운영진 버튼을 눌러주세요</div>
+    </div>
+    <div id="scoreAdminSection" style="display:none">
+      <div class="card">
+        <div class="card-title">점수 입력</div>
+        <select class="mission-select" id="missionSelect" onchange="renderScoreInputs()">
+          <option value="">미션 선택...</option>
+        </select>
+        <div id="scoreInputs"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">⚠️ 데이터 관리</div>
+        <button class="btn-secondary" onclick="resetAllScores()">🗑️ 전체 점수 초기화</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="page" id="page-tournament">
+    <div class="section-label" id="tournamentLabel" style="display:none">가위바위보 토너먼트</div>
+    <div id="tournamentLocked" class="card" style="text-align:center;padding:40px 20px;display:none">
+      <div style="font-size:40px;margin-bottom:12px">🔒</div>
+      <div style="font-weight:700;font-size:16px;margin-bottom:8px">토너먼트 미공개</div>
+      <div style="color:var(--muted);font-size:13px;margin-bottom:16px">바베큐 당일 공개됩니다 🔥</div>
+      <div id="tournamentAdminRevealBtn" style="display:none">
+        <button style="padding:10px 24px;border-radius:10px;background:var(--orange);border:none;color:white;font-size:14px;font-weight:900;cursor:pointer;font-family:inherit;" onclick="toggleTournamentReveal(true)">공개 🔓</button>
+      </div>
+    </div>
+    <div id="tournamentContent" style="display:none">
+      <div class="card" style="padding:10px">
+        <div style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:8px">← 좌우로 스크롤 &nbsp;|&nbsp; 운영진 모드에서 팀 이름 클릭 → 승자</div>
+        <div class="bracket"><div class="bracket-inner" id="bracketInner"></div></div>
+      </div>
+      <div class="card">
+        <div class="card-title">토너먼트 점수</div>
+        <div id="tournamentScores"></div>
+      </div>
+      <div id="tournamentHideBtn" style="display:none;margin-top:4px">
+        <button style="width:100%;padding:10px;border-radius:10px;background:transparent;border:1px solid var(--border);color:var(--muted);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;" onclick="toggleTournamentReveal(false)">🔒 다시 숨기기</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, onValue, update, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDuhL0lpFGR1QxDwEP9bGvgxNAw185TJ-s",
+  authDomain: "missiontest-94f24.firebaseapp.com",
+  databaseURL: "https://missiontest-94f24-default-rtdb.firebaseio.com",
+  projectId: "missiontest-94f24",
+  storageBucket: "missiontest-94f24.firebasestorage.app",
+  messagingSenderId: "381147426431",
+  appId: "1:381147426431:web:3cd63a924f49bd83d9194a"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+const MISSIONS = [
+  {id:1,title:'베스트 드레서',emoji:'👗',date:'5/18 (일)',loc:'크루즈 탑승 전',color:'#ff6b9d',colorBg:'rgba(255,107,157,0.1)',desc:'크루즈 탑승 전 각 팀의 드레스코드를 투표로 선정! 팀 대표 사진을 단톡방에 올리고 다른 팀이 투표합니다.',score:'등수별 차등 (최대 10점)',type:'rank'},
+  {id:2,title:'와인 가격 순위 맞추기',emoji:'🍷',date:'5/19 (월)',loc:'무스티에 단체 식사',color:'#a855f7',colorBg:'rgba(168,85,247,0.1)',desc:'팀 대표 1명이 블라인드 와인 3종 시음 후 비싼 순서로 순위를 맞춥니다.',score:'완벽 10점 / 2개 6점 / 1개 3점 / 0개 1점',type:'wine'},
+  {id:3,title:'걸음 수 로또',emoji:'👣',date:'5/23 (금)',loc:'팀미션 1Day',color:'#4ecdc4',colorBg:'rgba(78,205,196,0.1)',desc:'저녁 8시 정각 운영진 신호에 만보기 캡처! 걸음 수 마지막 자리 숫자가 가장 높은 팀 승리.',score:'등수별 차등 (최대 10점)',type:'rank'},
+  {id:4,title:'영수증 끝자리 포커',emoji:'🧾',date:'5/23 (금)',loc:'팀미션 1Day',color:'#3b82f6',colorBg:'rgba(59,130,246,0.1)',desc:'오늘 가장 금액 큰 영수증 1장을 단톡방에 올리세요. 끝 두 자리 합 가장 높은 팀 승리! (예: 45.95€ → 9+5=14)',score:'등수별 차등 (최대 10점)',type:'rank'},
+  {id:5,title:'도착시간 맞추기',emoji:'🏔️',date:'5/24 (토)',loc:'그린델발트 이동 중',color:'#ff6b35',colorBg:'rgba(255,107,53,0.1)',desc:'버스 출발 후 그린델발트 도착 예상 시간 제출! 실제 도착 시간과 차이가 가장 적은 팀 승리.',score:'등수별 차등 (최대 10점)',type:'rank'},
+  {id:6,title:'가위바위보 토너먼트',emoji:'✂️',date:'5/26 (월)',loc:'바베큐 직전 🔥',color:'#ffd700',colorBg:'rgba(255,215,0,0.1)',desc:'마지막 역전 찬스! 10팀 토너먼트 가위바위보.',score:'1등 13pt / 2등 10pt / 3등 8pt / 4등 6pt...',type:'tournament'},
+];
+
+const SCORE_TABLE = [10,8,6,5,4,3,2,2,1,1];
+const TOURNAMENT_SCORES = [13,10,8,6,5,4,3,2,1,1];
+
+// 조 이름 / 팀원 분리
+const TEAM_NAMES = ['1조','2조','3조','4조','5조','6조','7조','8조','9조','10조'];
+const TEAM_MEMBERS = [
+  '최명진 김지희 윤나라 박윤경',
+  '강기연 서주연 김기석 정현택',
+  '서희웅 김회록 박유리 박인영',
+  '김새벽 김민수 임화준 민경욱',
+  '신수향 배준기 김지영 문세림',
+  '윤해창 임규진 강정이 이수정',
+  '이종석 장송재 김호정 조선미',
+  '정동헌 성하준 마리나 이지윤',
+  '안동현 정용우 김연수 최지혜',
+  '황성재 정상훈 임성희 정지선',
+];
+
+const ADMIN_PWD = '2025europe';
+let isAdmin = false;
+let localScores = {};
+let localTournament = initTournament();
+let localRevealed = {}; // { missionId: true/false }
+let tournamentRevealed = false;
+TEAM_NAMES.forEach((_,i) => localScores[i] = {});
+
+function initTournament() {
+  return {
+    r0:[{a:0,b:1,w:null},{a:2,b:3,w:null},{a:4,b:5,w:null},{a:6,b:7,w:null},{a:8,b:9,w:null}],
+    r1:[{a:null,b:null,w:null},{a:null,b:null,w:null},{a:null,b:null,w:null}],
+    r2:[{a:null,b:null,w:null},{a:null,b:null,w:null}],
+    r3:[{a:null,b:null,w:null}]
+  };
+}
+
+onValue(ref(db,'scores'), snap => {
+  const data = snap.val();
+  TEAM_NAMES.forEach((_,i) => localScores[i] = data?.[i] || {});
+  renderLeaderboard();
+  document.getElementById('syncIndicator').textContent = '● LIVE';
+  document.getElementById('syncIndicator').className = 'sync-indicator';
+});
+
+onValue(ref(db,'tournament'), snap => {
+  const data = snap.val();
+  if(data) localTournament = data;
+  renderTournament();
+});
+
+onValue(ref(db,'revealed'), snap => {
+  localRevealed = snap.val() || {};
+  renderMissions();
+  renderLeaderboard();
+});
+
+onValue(ref(db,'tournamentRevealed'), snap => {
+  tournamentRevealed = snap.val() === true;
+  renderTournament();
+});
+
+function getTotal(i) { return Object.values(localScores[i]||{}).reduce((s,v)=>s+(v||0),0); }
+
+function getRanked() {
+  const arr = TEAM_NAMES.map((name,i)=>({name,i,total:getTotal(i)})).sort((a,b)=>b.total-a.total);
+  const result = [];
+  for(let idx=0; idx<arr.length; idx++) {
+    const rank = (idx>0 && arr[idx].total===arr[idx-1].total) ? result[idx-1].rank : idx+1;
+    result.push({...arr[idx], rank});
+  }
+  return result;
+}
+
+function showToast(msg) {
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2200);
+}
+function setSyncing() {
+  document.getElementById('syncIndicator').textContent='⟳ 저장중';
+  document.getElementById('syncIndicator').className='sync-indicator syncing';
+}
+
+window.toggleAdmin = function() {
+  if(isAdmin) {
+    isAdmin=false;
+    document.getElementById('adminToggle').classList.remove('active');
+    document.getElementById('adminToggle').textContent='⚙️ 운영진';
+    document.getElementById('scoreAdminSection').style.display='none';
+    document.getElementById('scoreLockedMsg').style.display='block';
+    renderTournament(); renderMissions(); showToast('운영진 모드 종료'); return;
+  }
+  const pwd=prompt('운영진 비밀번호:');
+  if(pwd===ADMIN_PWD) {
+    isAdmin=true;
+    document.getElementById('adminToggle').classList.add('active');
+    document.getElementById('adminToggle').textContent='✅ 운영진';
+    document.getElementById('scoreAdminSection').style.display='block';
+    document.getElementById('scoreLockedMsg').style.display='none';
+    renderTournament(); renderMissions(); showToast('운영진 모드 활성화! 🔓');
+  } else if(pwd!==null) showToast('비밀번호가 틀렸습니다');
+};
+
+window.switchTab = function(tab) {
+  ['leaderboard','missions','score','tournament'].forEach((id,i)=>{
+    document.querySelectorAll('.tab')[i].classList.toggle('active',id===tab);
+    document.getElementById('page-'+id).classList.toggle('active',id===tab);
+  });
+};
+
+function renderLeaderboard() {
+  const ranked=getRanked();
+  const max=Math.max(...ranked.map(t=>t.total),1);
+  const medals=['🥇','🥈','🥉'];
+  let html='';
+  ranked.forEach((t)=>{
+    const rc=t.rank<=3?`rank-${t.rank}`:'rank-other';
+    const rl=t.rank<=3?medals[t.rank-1]:String(t.rank);
+    const bc=t.rank===1?'#ffd700':t.rank===2?'#c0c0c0':t.rank===3?'#cd7f32':'#ff6b35';
+    const pct=t.total>0?(t.total/max*100):0;
+    html+=`<div class="team-row">
+      <div class="rank-badge ${rc}">${rl}</div>
+      <div class="team-info">
+        <div class="team-name">${TEAM_NAMES[t.i]}</div>
+        <div class="team-members">${TEAM_MEMBERS[t.i]}</div>
+        <div class="team-bar-wrap"><div class="team-bar" style="width:${pct}%;background:${bc}"></div></div>
+      </div>
+      <div class="team-score">${t.total}점</div>
+    </div>`;
+  });
+  document.getElementById('leaderboardList').innerHTML=html;
+
+  let ph='';
+  MISSIONS.forEach(m=>{
+    const revealed = localRevealed[m.id] === true;
+    if(!revealed) return; // 미공개 미션은 현황에서도 숨김
+    const done=TEAM_NAMES.some((_,i)=>localScores[i][m.id]!==undefined);
+    ph+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+      <div style="width:80px;font-size:10px;color:var(--muted)">${m.emoji} ${m.title.length>6?m.title.substring(0,6)+'…':m.title}</div>
+      <div style="flex:1;height:5px;background:rgba(255,255,255,0.08);border-radius:3px">
+        <div style="width:${done?100:0}%;height:5px;border-radius:3px;background:${m.color};transition:width 0.5s"></div>
+      </div>
+      <div style="font-size:10px;font-weight:700;color:${done?m.color:'var(--muted)'};width:28px">${done?'완료':'대기'}</div>
+    </div>`;
+  });
+  if(!ph) ph='<div style="color:var(--muted);font-size:12px;text-align:center;padding:10px">공개된 미션이 없습니다</div>';
+  document.getElementById('missionProgress').innerHTML=ph;
+}
+
+function renderMissions() {
+  let html='<div class="section-label">전체 미션 (6개)</div>';
+  MISSIONS.forEach(m=>{
+    const revealed = localRevealed[m.id] === true;
+    if(revealed) {
+      // Full mission card
+      html+=`<div class="mission-card" style="background:${m.colorBg};border-color:${m.color}44">
+        <div style="position:absolute;left:0;top:0;bottom:0;width:4px;background:${m.color};border-radius:4px 0 0 4px"></div>
+        <div class="mission-header">
+          <div class="mission-emoji">${m.emoji}</div>
+          <div>
+            <div class="mission-num" style="background:${m.color}22;color:${m.color}">미션 0${m.id}</div>
+            <div class="mission-title">${m.title}</div>
+            <div class="mission-meta">📅 ${m.date} &nbsp;📍 ${m.loc}</div>
+          </div>
+        </div>
+        <div class="mission-desc">${m.desc}</div>
+        <span class="score-pill">🏆 ${m.score}</span>
+        ${m.type!=='tournament'?'<span class="score-pill" style="color:#ffd700">🤝 동점 시 같은 등수, 다음 건너뜀</span>':''}
+        ${isAdmin?`<div style="margin-top:10px"><button style="width:100%;padding:8px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--muted);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;" onclick="toggleReveal(${m.id},false)">🔒 다시 숨기기</button></div>`:''}
+      </div>`;
+    } else {
+      // Locked card
+      html+=`<div class="mission-card" style="background:rgba(255,255,255,0.02);border-color:rgba(255,255,255,0.08)">
+        <div style="position:absolute;left:0;top:0;bottom:0;width:4px;background:rgba(255,255,255,0.15);border-radius:4px 0 0 4px"></div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="font-size:24px;opacity:0.3">🔒</div>
+          <div style="flex:1">
+            <div style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.2);letter-spacing:1px;margin-bottom:3px">미션 0${m.id}</div>
+            <div style="font-size:14px;font-weight:900;color:rgba(255,255,255,0.25)">미공개</div>
+            <div style="font-size:10px;color:rgba(255,255,255,0.2);margin-top:1px">📅 ${m.date} &nbsp;📍 ${m.loc}</div>
+          </div>
+          ${isAdmin?`<button style="padding:7px 14px;border-radius:8px;background:var(--orange);border:none;color:white;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;" onclick="toggleReveal(${m.id},true)">공개 🔓</button>`:'<div style="font-size:11px;color:rgba(255,255,255,0.2)">곧 공개</div>'}
+        </div>
+      </div>`;
+    }
+  });
+  document.getElementById('page-missions').innerHTML=html;
+}
+
+window.toggleReveal = function(missionId, reveal) {
+  if(!isAdmin) return;
+  update(ref(db), {[`revealed/${missionId}`]: reveal}).then(()=>{
+    showToast(reveal ? `미션 ${missionId} 공개! 🔓` : `미션 ${missionId} 숨김 🔒`);
+  });
+};
+
+function initScoreSelect() {
+  const sel=document.getElementById('missionSelect');
+  MISSIONS.forEach(m=>{
+    const o=document.createElement('option');
+    o.value=m.id; o.textContent=`${m.emoji} 미션 0${m.id}: ${m.title}`;
+    sel.appendChild(o);
+  });
+}
+
+window.renderScoreInputs = function() {
+  const mId=parseInt(document.getElementById('missionSelect').value);
+  const cont=document.getElementById('scoreInputs');
+  if(!mId){cont.innerHTML='';return;}
+  const m=MISSIONS.find(x=>x.id===mId);
+  if(m.type==='tournament'){
+    cont.innerHTML=`<div style="text-align:center;padding:16px;color:var(--muted);font-size:13px">토너먼트 탭에서 자동 계산됩니다 ✂️</div>`;
+    return;
+  }
+  if(m.type==='wine'){
+    let html=`<div style="font-size:12px;color:var(--muted);margin-bottom:10px">맞춘 개수 입력 (0~3)</div><div class="score-grid">`;
+    TEAM_NAMES.forEach((_,i)=>{
+      const cur=localScores[i][mId];
+      const count=cur===10?3:cur===6?2:cur===3?1:cur===1?0:'';
+      html+=`<div class="score-item">
+        <div class="score-label">${TEAM_NAMES[i]}</div>
+        <input class="score-inp" type="number" min="0" max="3" placeholder="0~3" value="${count}" id="wineinp_${i}" oninput="previewW(${i},this.value)">
+        <div style="font-size:10px;color:var(--muted);text-align:center" id="wp_${i}">${cur!==undefined?cur+'점':''}</div>
+      </div>`;
+    });
+    html+=`</div><button class="btn-primary" onclick="saveWine(${mId})">💾 저장</button>`;
+    cont.innerHTML=html; return;
+  }
+  let html=`<div style="font-size:12px;color:var(--muted);margin-bottom:10px">등수 입력 (1~10, 동점 허용)</div><div class="score-grid">`;
+  TEAM_NAMES.forEach((_,i)=>{
+    const cur=localScores[i][mId];
+    const rank=cur!==undefined?SCORE_TABLE.indexOf(cur)+1:'';
+    html+=`<div class="score-item">
+      <div class="score-label">${TEAM_NAMES[i]}</div>
+      <input class="score-inp" type="number" min="1" max="10" placeholder="등수" value="${rank}" id="ri_${i}">
+    </div>`;
+  });
+  html+=`</div><button class="btn-primary" onclick="saveRank(${mId})">💾 저장 (동점 자동 처리)</button>`;
+  cont.innerHTML=html;
+};
+
+window.previewW = function(i,v){
+  const n=parseInt(v);
+  const pts=n===3?10:n===2?6:n===1?3:n===0?1:'';
+  document.getElementById(`wp_${i}`).textContent=pts!==''?`→ ${pts}점`:'';
+};
+window.saveWine = function(mId){
+  setSyncing();
+  const upd={};
+  TEAM_NAMES.forEach((_,i)=>{
+    const v=parseInt(document.getElementById(`wineinp_${i}`).value);
+    if(!isNaN(v)&&v>=0&&v<=3) upd[`scores/${i}/${mId}`]=v===3?10:v===2?6:v===1?3:1;
+  });
+  update(ref(db),upd).then(()=>showToast('✅ 와인 점수 저장!'));
+};
+window.saveRank = function(mId){
+  setSyncing();
+  const rankMap={};
+  TEAM_NAMES.forEach((_,i)=>{
+    const r=parseInt(document.getElementById(`ri_${i}`).value);
+    if(!isNaN(r)){if(!rankMap[r])rankMap[r]=[];rankMap[r].push(i);}
+  });
+  const upd={};
+  let pos=0;
+  Object.keys(rankMap).map(Number).sort((a,b)=>a-b).forEach(rank=>{
+    const teams=rankMap[rank];
+    const pts=SCORE_TABLE[pos]??1;
+    teams.forEach(i=>upd[`scores/${i}/${mId}`]=pts);
+    pos+=teams.length;
+  });
+  update(ref(db),upd).then(()=>{showToast('✅ 점수 저장!');renderScoreInputs();});
+};
+window.resetAllScores = function(){
+  if(!confirm('정말 전체 점수를 초기화할까요?'))return;
+  remove(ref(db,'scores')).then(()=>remove(ref(db,'tournament')).then(()=>showToast('🗑️ 초기화 완료')));
+};
+
+function propagate(t) {
+  if(t.r0[0].w!==null&&t.r0[1].w!==null){t.r1[0].a=t.r0[0].w;t.r1[0].b=t.r0[1].w;}
+  if(t.r0[2].w!==null&&t.r0[3].w!==null){t.r1[1].a=t.r0[2].w;t.r1[1].b=t.r0[3].w;}
+  if(t.r0[4].w!==null)t.r1[2].a=t.r0[4].w;
+  if(t.r1[0].w!==null&&t.r1[2].a!==null){t.r2[0].a=t.r1[0].w;t.r2[0].b=t.r1[2].a;}
+  if(t.r1[1].w!==null)t.r2[1].a=t.r1[1].w;
+  if(t.r2[0].w!==null&&t.r2[1].a!==null){t.r3[0].a=t.r2[0].w;t.r3[0].b=t.r2[1].a;}
+  return t;
+}
+
+window.toggleTournamentReveal = function(reveal) {
+  if(!isAdmin) return;
+  update(ref(db), {'tournamentRevealed': reveal}).then(()=>{
+    showToast(reveal ? '토너먼트 공개! 🔓' : '토너먼트 숨김 🔒');
+  });
+};
+
+function renderTournament() {
+  // Handle locked/revealed state
+  const locked = document.getElementById('tournamentLocked');
+  const tcontent = document.getElementById('tournamentContent');
+  const adminRevealBtn = document.getElementById('tournamentAdminRevealBtn');
+  const hideBtn = document.getElementById('tournamentHideBtn');
+  if(locked && tcontent) {
+    const label = document.getElementById('tournamentLabel');
+    if(tournamentRevealed) {
+      locked.style.display='none';
+      tcontent.style.display='block';
+      if(label) label.style.display='block';
+      if(hideBtn) hideBtn.style.display = isAdmin ? 'block' : 'none';
+    } else {
+      locked.style.display='block';
+      tcontent.style.display='none';
+      if(label) label.style.display='none';
+      if(adminRevealBtn) adminRevealBtn.style.display = isAdmin ? 'block' : 'none';
+      return;
+    }
+  }
+  const t=propagate(JSON.parse(JSON.stringify(localTournament)));
+  const inner=document.getElementById('bracketInner');
+  const shortName=(idx)=>idx!==null?TEAM_NAMES[idx]:'대기중';
+  const mHTML=(rnd,mi,a,b,w)=>{
+    const aTbd=a===null,bTbd=b===null,aW=w===a&&a!==null,bW=w===b&&b!==null;
+    const clk=(idx)=>isAdmin&&!aTbd&&!bTbd?`onclick="setW('${rnd}',${mi},${idx})"`:''
+    return `<div class="match">
+      <div class="match-team ${aTbd?'tbd':aW?'winner':w!==null?'loser':''}" ${clk(a)}>${shortName(a)}${aW?' ✓':''}</div>
+      <div class="match-team ${bTbd?'tbd':bW?'winner':w!==null?'loser':''}" ${clk(b)}>${shortName(b)}${bW?' ✓':''}</div>
+    </div>`;
+  };
+  let html='';
+  html+=`<div class="round"><div class="round-title">1라운드</div><div class="matches">`;
+  t.r0.forEach((m,i)=>html+=mHTML('r0',i,m.a,m.b,m.w));
+  html+=`</div></div><div style="width:6px;flex-shrink:0"></div>`;
+  html+=`<div class="round"><div class="round-title">2라운드</div><div class="matches">`;
+  t.r1.forEach((m,i)=>{
+    if(i===2)html+=`<div class="match"><div class="match-team ${m.a!==null?'':'tbd'}" style="border:none">${shortName(m.a)} <span style="font-size:9px;color:var(--muted)">부전승</span></div></div>`;
+    else html+=mHTML('r1',i,m.a,m.b,m.w);
+  });
+  html+=`</div></div><div style="width:6px;flex-shrink:0"></div>`;
+  html+=`<div class="round"><div class="round-title">준결승</div><div class="matches">`;
+  t.r2.forEach((m,i)=>{
+    if(i===1)html+=`<div class="match"><div class="match-team ${m.a!==null?'':'tbd'}" style="border:none">${shortName(m.a)} <span style="font-size:9px;color:var(--muted)">부전승</span></div></div>`;
+    else html+=mHTML('r2',i,m.a,m.b,m.w);
+  });
+  html+=`</div></div><div style="width:6px;flex-shrink:0"></div>`;
+  html+=`<div class="round"><div class="round-title">결승</div><div class="matches">`;
+  html+=mHTML('r3',0,t.r3[0].a,t.r3[0].b,t.r3[0].w);
+  html+=`</div></div><div style="width:8px;flex-shrink:0"></div>`;
+  const champ=t.r3[0].w;
+  html+=`<div class="champion-box"><span class="champion-crown">🏆</span><div class="champion-name">${champ!==null?TEAM_NAMES[champ]:'?'}</div><div style="font-size:9px;color:var(--muted)">우승</div></div>`;
+  inner.innerHTML=html;
+
+  const scores6=TEAM_NAMES.map((_,i)=>({name:`${TEAM_NAMES[i]} (${TEAM_MEMBERS[i].split(' ').slice(0,2).join(' ')}…)`,pts:localScores[i][6]})).filter(x=>x.pts!==undefined);
+  document.getElementById('tournamentScores').innerHTML=scores6.length
+    ?scores6.map(x=>`<div class="summary-row"><div>${x.name}</div><div style="font-weight:700;color:var(--yellow)">${x.pts}점</div></div>`).join('')
+    :`<div style="color:var(--muted);font-size:12px;text-align:center;padding:14px">토너먼트 진행 후 자동 반영됩니다</div>`;
+}
+
+window.setW = function(rnd,mi,winnerIdx) {
+  if(!isAdmin)return;
+  setSyncing();
+  const upd={};
+  upd[`tournament/${rnd}/${mi}/w`]=winnerIdx;
+  update(ref(db),upd).then(()=>{
+    showToast(`${TEAM_NAMES[winnerIdx]} 승리! 🎉`);
+    const t=propagate(JSON.parse(JSON.stringify(localTournament)));
+    const champ=t.r3[0].w;
+    const finalist=champ!==null?(t.r3[0].a===champ?t.r3[0].b:t.r3[0].a):null;
+    const semi3rd=t.r2[0].w!==null?(t.r2[0].a===t.r2[0].w?t.r2[0].b:t.r2[0].a):null;
+    const su={};
+    if(champ!==null)su[`scores/${champ}/6`]=TOURNAMENT_SCORES[0];
+    if(finalist!==null)su[`scores/${finalist}/6`]=TOURNAMENT_SCORES[1];
+    if(semi3rd!==null)su[`scores/${semi3rd}/6`]=TOURNAMENT_SCORES[2];
+    if(Object.keys(su).length>0)update(ref(db),su);
+  });
+};
+
+renderMissions();
+initScoreSelect();
+</script>
+</body>
+</html>
