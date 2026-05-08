@@ -117,6 +117,7 @@
     <div class="tab" onclick="switchTab('missions')">📋 미션</div>
     <div class="tab" onclick="switchTab('score')">✏️ 점수입력</div>
     <div class="tab" onclick="switchTab('tournament')">✂️ 토너먼트</div>
+    <div class="tab" onclick="switchTab('seating')">🎲 자리/선물</div>
   </div>
 </div>
 
@@ -175,6 +176,24 @@
       </div>
     </div>
   </div>
+  <div class="page" id="page-seating">
+    <div class="section-label">랜덤 자리 배정</div>
+    <div id="seatingAdminBtn" style="display:none" class="card" >
+      <div class="card-title">운영진 전용</div>
+      <button class="btn-primary" onclick="assignSeats()">🎲 자리 랜덤 배정!</button>
+      <button class="btn-secondary" onclick="resetSeats()">🗑️ 자리 초기화</button>
+    </div>
+    <div id="seatingResult"></div>
+
+    <div class="section-label" style="margin-top:20px">🎁 선물 교환 매칭</div>
+    <div id="giftAdminBtn" style="display:none" class="card">
+      <div class="card-title">운영진 전용</div>
+      <button class="btn-primary" onclick="assignGifts()">🎁 선물 매칭 실행!</button>
+      <button class="btn-secondary" onclick="resetGifts()">🗑️ 선물 초기화</button>
+    </div>
+    <div id="giftResult"></div>
+  </div>
+
 </div>
 
 <div class="toast" id="toast"></div>
@@ -229,6 +248,8 @@ let localScores = {};
 let localTournament = initTournament();
 let localRevealed = {}; // { missionId: true/false }
 let tournamentRevealed = false;
+let localSeating = null; // [{group: 0, members: [...names]}]
+let localGifts = null;   // {name: targetName}
 TEAM_NAMES.forEach((_,i) => localScores[i] = {});
 
 function initTournament() {
@@ -258,6 +279,16 @@ onValue(ref(db,'revealed'), snap => {
   localRevealed = snap.val() || {};
   renderMissions();
   renderLeaderboard();
+});
+
+onValue(ref(db,'seating'), snap => {
+  localSeating = snap.val() || null;
+  renderSeating();
+});
+
+onValue(ref(db,'gifts'), snap => {
+  localGifts = snap.val() || null;
+  renderGifts();
 });
 
 onValue(ref(db,'tournamentRevealed'), snap => {
@@ -294,7 +325,7 @@ window.toggleAdmin = function() {
     document.getElementById('adminToggle').textContent='⚙️ 운영진';
     document.getElementById('scoreAdminSection').style.display='none';
     document.getElementById('scoreLockedMsg').style.display='block';
-    renderTournament(); renderMissions(); showToast('운영진 모드 종료'); return;
+    renderTournament(); renderMissions(); renderSeating(); renderGifts(); showToast('운영진 모드 종료'); return;
   }
   const pwd=prompt('운영진 비밀번호:');
   if(pwd===ADMIN_PWD) {
@@ -303,12 +334,12 @@ window.toggleAdmin = function() {
     document.getElementById('adminToggle').textContent='✅ 운영진';
     document.getElementById('scoreAdminSection').style.display='block';
     document.getElementById('scoreLockedMsg').style.display='none';
-    renderTournament(); renderMissions(); showToast('운영진 모드 활성화! 🔓');
+    renderTournament(); renderMissions(); renderSeating(); renderGifts(); showToast('운영진 모드 활성화! 🔓');
   } else if(pwd!==null) showToast('비밀번호가 틀렸습니다');
 };
 
 window.switchTab = function(tab) {
-  ['leaderboard','missions','score','tournament'].forEach((id,i)=>{
+  ['leaderboard','missions','score','tournament','seating'].forEach((id,i)=>{
     document.querySelectorAll('.tab')[i].classList.toggle('active',id===tab);
     document.getElementById('page-'+id).classList.toggle('active',id===tab);
   });
@@ -577,6 +608,165 @@ window.setW = function(rnd,mi,winnerIdx) {
     if(Object.keys(su).length>0)update(ref(db),su);
   });
 };
+
+// ── SEATING & GIFTS ──────────────────────────────────────────────
+const ALL_MEMBERS = [
+  '최명진','김지희','윤나라','박윤경',
+  '강기연','서주연','김기석','정현택',
+  '서희웅','김회록','박유리','박인영',
+  '김새벽','김민수','임화준','민경욱',
+  '신수향','배준기','김지영','문세림',
+  '윤해창','임규진','강정이','이수정',
+  '이종석','장송재','김호정','조선미',
+  '정동헌','성하준','마리나','이지윤',
+  '안동현','정용우','김연수','최지혜',
+  '황성재','정상훈','임성희','정지선'
+];
+
+function shuffle(arr) {
+  const a = [...arr];
+  for(let i=a.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [a[i],a[j]]=[a[j],a[i]];
+  }
+  return a;
+}
+
+window.assignSeats = function() {
+  if(!isAdmin) return;
+  if(!confirm('자리를 랜덤 배정할까요?')) return;
+  const shuffled = shuffle(ALL_MEMBERS);
+  const groups = [];
+  for(let i=0;i<10;i++) groups.push({group:i+1, members: shuffled.slice(i*4,(i+1)*4)});
+  update(ref(db),{'seating': groups}).then(()=>showToast('🎲 자리 배정 완료!'));
+};
+
+window.resetSeats = function() {
+  if(!isAdmin) return;
+  if(!confirm('자리 배정을 초기화할까요?')) return;
+  remove(ref(db,'seating')).then(()=>showToast('🗑️ 자리 초기화'));
+};
+
+window.assignGifts = function() {
+  if(!isAdmin) return;
+  if(!localSeating){showToast('먼저 자리 배정을 해주세요!');return;}
+  if(!confirm('선물 매칭을 실행할까요?')) return;
+
+  const gifts = {};
+
+  // Step 1: 전체 테이블에서 각각 1명씩 2개 테이블을 랜덤 선택 → 자기 자신에게 선물
+  const tableIndices = shuffle([...Array(localSeating.length).keys()]);
+  const selfGiftTables = [tableIndices[0], tableIndices[1]]; // 서로 다른 테이블 2개
+  const selfGiftMembers = selfGiftTables.map(ti => {
+    const members = localSeating[ti].members;
+    return members[Math.floor(Math.random() * members.length)];
+  });
+
+  // Step 2: 각 테이블 내에서 선물 매칭 (자기→자기 제외, 단 selfGiftMember는 자기→자기)
+  localSeating.forEach((g, ti) => {
+    const members = [...g.members];
+    const selfMember = selfGiftTables.includes(ti)
+      ? selfGiftMembers[selfGiftTables.indexOf(ti)]
+      : null;
+
+    // selfMember는 자기 자신에게 고정
+    if(selfMember) gifts[selfMember] = selfMember;
+
+    // 나머지 멤버들끼리 derangement (자기→자기 없는 완전 랜덤)
+    const others = members.filter(m => m !== selfMember);
+    let targets;
+    let attempts = 0;
+    do {
+      targets = shuffle([...others]);
+      attempts++;
+    } while(targets.some((t,i) => t === others[i]) && attempts < 100);
+    others.forEach((m,i) => gifts[m] = targets[i]);
+  });
+
+  update(ref(db),{'gifts': gifts}).then(()=>showToast('🎁 선물 매칭 완료!'));
+};
+
+window.resetGifts = function() {
+  if(!isAdmin) return;
+  if(!confirm('선물 매칭을 초기화할까요?')) return;
+  remove(ref(db,'gifts')).then(()=>showToast('🗑️ 선물 초기화'));
+};
+
+window.revealGift = function(name) {
+  if(!localGifts || !localGifts[name]) return;
+  const target = localGifts[name];
+  const isSelf = name === target;
+  const el = document.getElementById('gift_'+name.replace(/\s/g,'_'));
+  if(el) {
+    el.innerHTML = isSelf
+      ? `<span style="color:var(--yellow);font-weight:700">🤣 나 자신! (${target})</span>`
+      : `<span style="color:var(--mint);font-weight:700">🎁 ${target}</span>`;
+    el.onclick = null;
+    el.style.cursor = 'default';
+    el.style.background = 'rgba(78,205,196,0.1)';
+  }
+};
+
+function renderSeating() {
+  const adminBtn = document.getElementById('seatingAdminBtn');
+  if(adminBtn) adminBtn.style.display = isAdmin ? 'block' : 'none';
+
+  const cont = document.getElementById('seatingResult');
+  if(!cont) return;
+  if(!localSeating) {
+    cont.innerHTML = `<div class="card" style="text-align:center;padding:30px;color:var(--muted)">
+      ${isAdmin ? '운영진 버튼으로 자리를 배정해주세요' : '자리 배정 전입니다 ⏳'}
+    </div>`;
+    return;
+  }
+  let html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
+  localSeating.forEach(g => {
+    html += `<div class="card" style="padding:12px">
+      <div style="font-size:11px;font-weight:700;color:var(--orange);margin-bottom:8px">🪑 ${g.group}번 테이블</div>
+      ${g.members.map(m=>`<div style="padding:4px 0;font-size:13px;font-weight:700;border-bottom:1px solid var(--border)">${m}</div>`).join('')}
+    </div>`;
+  });
+  html += '</div>';
+  cont.innerHTML = html;
+}
+
+function renderGifts() {
+  const adminBtn = document.getElementById('giftAdminBtn');
+  if(adminBtn) adminBtn.style.display = isAdmin ? 'block' : 'none';
+
+  const cont = document.getElementById('giftResult');
+  if(!cont) return;
+  if(!localSeating) {
+    cont.innerHTML = `<div class="card" style="text-align:center;padding:20px;color:var(--muted);font-size:13px">자리 배정 후 선물 매칭이 가능합니다</div>`;
+    return;
+  }
+  if(!localGifts) {
+    cont.innerHTML = `<div class="card" style="text-align:center;padding:20px;color:var(--muted);font-size:13px">
+      ${isAdmin ? '운영진 버튼으로 선물 매칭을 실행해주세요' : '선물 매칭 전입니다 🎁'}
+    </div>`;
+    return;
+  }
+  let html = '';
+  localSeating.forEach(g => {
+    html += `<div class="card" style="margin-bottom:10px">
+      <div style="font-size:11px;font-weight:700;color:var(--orange);margin-bottom:10px">🎁 ${g.group}번 테이블 선물 매칭</div>`;
+    g.members.forEach(m => {
+      const safeId = 'gift_'+m.replace(/\s/g,'_');
+      const revealed = localGifts && localGifts[m];
+      const isSelf = revealed && localGifts[m] === m;
+      html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="font-weight:700;font-size:13px">${m}</div>
+        <div id="${safeId}"
+          onclick="revealGift('${m}')"
+          style="padding:5px 12px;border-radius:8px;background:rgba(255,107,53,0.15);border:1px solid var(--orange);color:var(--orange);font-size:12px;font-weight:700;cursor:pointer">
+          터치해서 확인 👆
+        </div>
+      </div>`;
+    });
+    html += '</div>';
+  });
+  cont.innerHTML = html;
+}
 
 renderMissions();
 initScoreSelect();
