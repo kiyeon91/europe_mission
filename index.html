@@ -440,72 +440,297 @@ function initScoreSelect() {
   });
 }
 
-window.renderScoreInputs = function() {
-  const mId=parseInt(document.getElementById('missionSelect').value);
-  const cont=document.getElementById('scoreInputs');
-  if(!mId){cont.innerHTML='';return;}
-  const m=MISSIONS.find(x=>x.id===mId);
-  if(m.type==='tournament'){
-    cont.innerHTML=`<div style="text-align:center;padding:16px;color:var(--muted);font-size:13px">토너먼트 탭에서 자동 계산됩니다 ✂️</div>`;
-    return;
-  }
-  if(m.type==='wine'){
-    let html=`<div style="font-size:12px;color:var(--muted);margin-bottom:10px">맞춘 개수 입력 (0~3)</div><div class="score-grid">`;
-    TEAM_NAMES.forEach((_,i)=>{
-      const cur=localScores[i][mId];
-      const count=cur===10?3:cur===6?2:cur===3?1:cur===1?0:'';
-      html+=`<div class="score-item">
-        <div class="score-label">${TEAM_NAMES[i]}</div>
-        <input class="score-inp" type="number" min="0" max="3" placeholder="0~3" value="${count}" id="wineinp_${i}" oninput="previewW(${i},this.value)">
-        <div style="font-size:10px;color:var(--muted);text-align:center" id="wp_${i}">${cur!==undefined?cur+'점':''}</div>
-      </div>`;
-    });
-    html+=`</div><button class="btn-primary" onclick="saveWine(${mId})">💾 저장</button>`;
-    cont.innerHTML=html; return;
-  }
-  let html=`<div style="font-size:12px;color:var(--muted);margin-bottom:10px">등수 입력 (1~10, 동점 허용)</div><div class="score-grid">`;
-  TEAM_NAMES.forEach((_,i)=>{
-    const cur=localScores[i][mId];
-    const rank=cur!==undefined?SCORE_TABLE.indexOf(cur)+1:'';
-    html+=`<div class="score-item">
-      <div class="score-label">${TEAM_NAMES[i]}</div>
-      <input class="score-inp" type="number" min="1" max="10" placeholder="등수" value="${rank}" id="ri_${i}">
-    </div>`;
-  });
-  html+=`</div><button class="btn-primary" onclick="saveRank(${mId})">💾 저장 (동점 자동 처리)</button>`;
-  cont.innerHTML=html;
-};
+// ── SMART SCORE CALCULATORS ──────────────────────────────────────
 
-window.previewW = function(i,v){
-  const n=parseInt(v);
-  const pts=n===3?10:n===2?6:n===1?3:n===0?1:'';
-  document.getElementById(`wp_${i}`).textContent=pts!==''?`→ ${pts}점`:'';
-};
-window.saveWine = function(mId){
-  setSyncing();
-  const upd={};
-  TEAM_NAMES.forEach((_,i)=>{
-    const v=parseInt(document.getElementById(`wineinp_${i}`).value);
-    if(!isNaN(v)&&v>=0&&v<=3) upd[`scores/${i}/${mId}`]=v===3?10:v===2?6:v===1?3:1;
-  });
-  update(ref(db),upd).then(()=>showToast('✅ 와인 점수 저장!'));
-};
-window.saveRank = function(mId){
-  setSyncing();
-  const rankMap={};
-  TEAM_NAMES.forEach((_,i)=>{
-    const r=parseInt(document.getElementById(`ri_${i}`).value);
-    if(!isNaN(r)){if(!rankMap[r])rankMap[r]=[];rankMap[r].push(i);}
-  });
+function ranksToScores(rankMap) {
   const upd={};
   let pos=0;
   Object.keys(rankMap).map(Number).sort((a,b)=>a-b).forEach(rank=>{
     const teams=rankMap[rank];
     const pts=SCORE_TABLE[pos]??1;
-    teams.forEach(i=>upd[`scores/${i}/${mId}`]=pts);
+    teams.forEach(i=>upd[i]=pts);
     pos+=teams.length;
   });
-  update(ref(db),upd).then(()=>{showToast('✅ 점수 저장!');renderScoreInputs();});
+  return upd;
+}
+
+function saveScores(mId, scoreMap) {
+  setSyncing();
+  const upd={};
+  Object.entries(scoreMap).forEach(([i,pts])=>upd[`scores/${i}/${mId}`]=pts);
+  update(ref(db),upd).then(()=>{showToast('✅ 점수 저장 완료!'); renderScoreInputs();});
+}
+
+// Mission 1: 베스트 드레서 - 득표수 입력
+function renderM1() {
+  let html=`<div style="font-size:12px;color:var(--muted);margin-bottom:12px">각 팀 득표수를 입력하면 자동으로 등수와 점수를 계산해요</div>
+  <div class="score-grid">`;
+  TEAM_NAMES.forEach((_,i)=>{
+    html+=`<div class="score-item">
+      <div class="score-label">${TEAM_NAMES[i]}</div>
+      <input class="score-inp" type="number" min="0" placeholder="득표수" id="m1_${i}">
+    </div>`;
+  });
+  html+=`</div>
+  <div id="m1_preview" style="margin-bottom:12px"></div>
+  <button class="btn-primary" onclick="calcM1()">🔢 자동 계산 후 저장</button>`;
+  return html;
+}
+
+window.calcM1 = function() {
+  const votes={};
+  TEAM_NAMES.forEach((_,i)=>{
+    const v=parseInt(document.getElementById('m1_'+i).value);
+    if(!isNaN(v)) votes[i]=v;
+  });
+  const sorted=[...Object.entries(votes)].sort((a,b)=>b[1]-a[1]);
+  const rankMap={};
+  let rank=1;
+  sorted.forEach(([i,v],idx)=>{
+    if(idx>0&&v===sorted[idx-1][1]) rankMap[rank-1]=[...(rankMap[rank-1]||[]),parseInt(i)];
+    else { rankMap[rank]=[parseInt(i)]; }
+    rank=idx+2;
+  });
+  // fix rankMap
+  const rm={};
+  let pos=1;
+  sorted.forEach(([i,v],idx)=>{
+    if(idx>0&&v===sorted[idx-1][1]){ rm[Object.keys(rm).pop()].push(parseInt(i)); }
+    else { rm[pos]=[parseInt(i)]; }
+    pos=idx+2;
+  });
+  const scoreMap=ranksToScores(rm);
+  // preview
+  let prev='<div style="margin-bottom:8px;font-size:11px;color:var(--muted)">계산 결과:</div>';
+  sorted.forEach(([i,v],idx)=>{
+    prev+=`<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border)">
+      <span>${TEAM_NAMES[i]}</span>
+      <span style="color:var(--muted)">${v}표 → <span style="color:var(--orange);font-weight:700">${scoreMap[i]??1}점</span></span>
+    </div>`;
+  });
+  document.getElementById('m1_preview').innerHTML=prev;
+  saveScores(1, scoreMap);
+};
+
+// Mission 2: 와인 순위 맞추기
+function renderM2() {
+  let html=`<div style="font-size:12px;color:var(--muted);margin-bottom:12px">정답 순서를 입력하고, 각 팀 대표가 제출한 순서를 입력하면 자동으로 맞춘 개수를 계산해요</div>
+  <div style="background:rgba(168,85,247,0.1);border:1px solid rgba(168,85,247,0.3);border-radius:10px;padding:12px;margin-bottom:14px">
+    <div style="font-size:11px;font-weight:700;color:#a855f7;margin-bottom:8px">🍷 실제 정답 순서 (비싼 순)</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+      <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px">1위 (가장 비쌈)</div>
+        <select class="mission-select" style="margin:0;padding:8px" id="wine_ans_1"><option value="">선택</option><option>A</option><option>B</option><option>C</option></select></div>
+      <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px">2위</div>
+        <select class="mission-select" style="margin:0;padding:8px" id="wine_ans_2"><option value="">선택</option><option>A</option><option>B</option><option>C</option></select></div>
+      <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px">3위 (가장 쌈)</div>
+        <select class="mission-select" style="margin:0;padding:8px" id="wine_ans_3"><option value="">선택</option><option>A</option><option>B</option><option>C</option></select></div>
+    </div>
+  </div>
+  <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px">각 팀 대표 제출 순서</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">`;
+  TEAM_NAMES.forEach((_,i)=>{
+    html+=`<div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;padding:8px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:6px">${TEAM_NAMES[i]}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px">
+        <select class="mission-select" style="margin:0;padding:6px;font-size:11px" id="wine_${i}_1"><option value="">1위</option><option>A</option><option>B</option><option>C</option></select>
+        <select class="mission-select" style="margin:0;padding:6px;font-size:11px" id="wine_${i}_2"><option value="">2위</option><option>A</option><option>B</option><option>C</option></select>
+        <select class="mission-select" style="margin:0;padding:6px;font-size:11px" id="wine_${i}_3"><option value="">3위</option><option>A</option><option>B</option><option>C</option></select>
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-top:4px;text-align:center" id="wine_res_${i}"></div>
+    </div>`;
+  });
+  html+=`</div>
+  <div id="m2_preview" style="margin-bottom:12px"></div>
+  <button class="btn-primary" onclick="calcM2()">🔢 자동 계산 후 저장</button>`;
+  return html;
+}
+
+window.calcM2 = function() {
+  const ans=[document.getElementById('wine_ans_1').value, document.getElementById('wine_ans_2').value, document.getElementById('wine_ans_3').value];
+  if(ans.some(a=>!a)){showToast('정답 순서를 모두 입력해주세요!');return;}
+  const scoreMap={};
+  let prev='<div style="font-size:11px;color:var(--muted);margin-bottom:6px">계산 결과:</div>';
+  TEAM_NAMES.forEach((_,i)=>{
+    const team=[document.getElementById(`wine_${i}_1`).value, document.getElementById(`wine_${i}_2`).value, document.getElementById(`wine_${i}_3`).value];
+    const correct=team.filter((v,j)=>v===ans[j]).length;
+    const pts=correct===3?10:correct===2?6:correct===1?3:1;
+    scoreMap[i]=pts;
+    document.getElementById(`wine_res_${i}`).textContent=`${correct}개 정답 → ${pts}점`;
+    prev+=`<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border)">
+      <span>${TEAM_NAMES[i]}</span><span style="color:var(--orange);font-weight:700">${correct}개 → ${pts}점</span></div>`;
+  });
+  document.getElementById('m2_preview').innerHTML=prev;
+  saveScores(2, scoreMap);
+};
+
+// Mission 3: 걸음 수 로또
+function renderM3() {
+  let html=`<div style="font-size:12px;color:var(--muted);margin-bottom:12px">각 팀 대표의 오늘 걸음 수를 입력하면 마지막 자리를 자동 추출해요</div>
+  <div class="score-grid">`;
+  TEAM_NAMES.forEach((_,i)=>{
+    html+=`<div class="score-item">
+      <div class="score-label">${TEAM_NAMES[i]}</div>
+      <input class="score-inp" type="number" min="0" placeholder="걸음 수" id="m3_${i}" oninput="previewM3(${i},this.value)">
+      <div style="font-size:10px;color:var(--mint);text-align:center" id="m3_p_${i}"></div>
+    </div>`;
+  });
+  html+=`</div>
+  <div id="m3_preview" style="margin-bottom:12px"></div>
+  <button class="btn-primary" onclick="calcM3()">🔢 자동 계산 후 저장</button>`;
+  return html;
+}
+
+window.previewM3 = function(i, v) {
+  const n=parseInt(v);
+  if(isNaN(n)||n<0){document.getElementById('m3_p_'+i).textContent='';return;}
+  const last=n%10;
+  document.getElementById('m3_p_'+i).textContent=`끝자리: ${last}`;
+};
+
+window.calcM3 = function() {
+  const lastDigits={};
+  TEAM_NAMES.forEach((_,i)=>{
+    const v=parseInt(document.getElementById('m3_'+i).value);
+    if(!isNaN(v)&&v>=0) lastDigits[i]=v%10;
+  });
+  if(Object.keys(lastDigits).length===0){showToast('걸음 수를 입력해주세요!');return;}
+  // rank by last digit desc
+  const sorted=Object.entries(lastDigits).sort((a,b)=>b[1]-a[1]);
+  const rm={};
+  let pos=1;
+  sorted.forEach(([i,d],idx)=>{
+    if(idx>0&&d===sorted[idx-1][1]){ rm[Object.keys(rm)[Object.keys(rm).length-1]].push(parseInt(i)); }
+    else { rm[pos]=[parseInt(i)]; }
+    pos=idx+2;
+  });
+  const scoreMap=ranksToScores(rm);
+  let prev='<div style="font-size:11px;color:var(--muted);margin-bottom:6px">계산 결과 (끝자리 기준):</div>';
+  sorted.forEach(([i,d])=>{
+    prev+=`<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border)">
+      <span>${TEAM_NAMES[i]}</span><span style="color:var(--mint)">끝자리 ${d} → <span style="color:var(--orange);font-weight:700">${scoreMap[i]??1}점</span></span></div>`;
+  });
+  document.getElementById('m3_preview').innerHTML=prev;
+  saveScores(3, scoreMap);
+};
+
+// Mission 4: 영수증 끝자리 포커
+function renderM4() {
+  let html=`<div style="font-size:12px;color:var(--muted);margin-bottom:12px">영수증 금액을 입력하면 끝 두 자리 합을 자동 계산해요 (예: 45.95 → 9+5=14)</div>
+  <div class="score-grid">`;
+  TEAM_NAMES.forEach((_,i)=>{
+    html+=`<div class="score-item">
+      <div class="score-label">${TEAM_NAMES[i]}</div>
+      <input class="score-inp" type="text" placeholder="예: 45.95" id="m4_${i}" oninput="previewM4(${i},this.value)">
+      <div style="font-size:10px;color:var(--blue);text-align:center" id="m4_p_${i}"></div>
+    </div>`;
+  });
+  html+=`</div>
+  <div id="m4_preview" style="margin-bottom:12px"></div>
+  <button class="btn-primary" onclick="calcM4()">🔢 자동 계산 후 저장</button>`;
+  return html;
+}
+
+window.previewM4 = function(i, v) {
+  const sum = calcReceiptSum(v);
+  document.getElementById('m4_p_'+i).textContent = sum!==null ? `끝 두 자리 합: ${sum}` : '';
+};
+
+function calcReceiptSum(v) {
+  const str=String(v).replace(/[^0-9]/g,'');
+  if(str.length<2) return null;
+  const d1=parseInt(str[str.length-2]);
+  const d2=parseInt(str[str.length-1]);
+  return d1+d2;
+}
+
+window.calcM4 = function() {
+  const sums={};
+  TEAM_NAMES.forEach((_,i)=>{
+    const v=document.getElementById('m4_'+i).value;
+    const s=calcReceiptSum(v);
+    if(s!==null) sums[i]=s;
+  });
+  if(Object.keys(sums).length===0){showToast('영수증 금액을 입력해주세요!');return;}
+  const sorted=Object.entries(sums).sort((a,b)=>b[1]-a[1]);
+  const rm={};
+  let pos=1;
+  sorted.forEach(([i,s],idx)=>{
+    if(idx>0&&s===sorted[idx-1][1]){ rm[Object.keys(rm)[Object.keys(rm).length-1]].push(parseInt(i)); }
+    else { rm[pos]=[parseInt(i)]; }
+    pos=idx+2;
+  });
+  const scoreMap=ranksToScores(rm);
+  let prev='<div style="font-size:11px;color:var(--muted);margin-bottom:6px">계산 결과:</div>';
+  sorted.forEach(([i,s])=>{
+    prev+=`<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border)">
+      <span>${TEAM_NAMES[i]}</span><span style="color:var(--blue)">합: ${s} → <span style="color:var(--orange);font-weight:700">${scoreMap[i]??1}점</span></span></div>`;
+  });
+  document.getElementById('m4_preview').innerHTML=prev;
+  saveScores(4, scoreMap);
+};
+
+// Mission 5: 도착시간 맞추기
+function renderM5() {
+  let html=`<div style="font-size:12px;color:var(--muted);margin-bottom:12px">각 팀 예상 도착시간을 입력하고 실제 도착시간을 입력하면 차이를 자동 계산해요</div>
+  <div style="background:rgba(255,107,53,0.1);border:1px solid rgba(255,107,53,0.3);border-radius:10px;padding:12px;margin-bottom:14px">
+    <div style="font-size:11px;font-weight:700;color:var(--orange);margin-bottom:8px">🏔️ 실제 도착 시간</div>
+    <input class="score-inp" type="time" id="m5_actual" style="width:100%">
+  </div>
+  <div class="score-grid">`;
+  TEAM_NAMES.forEach((_,i)=>{
+    html+=`<div class="score-item">
+      <div class="score-label">${TEAM_NAMES[i]}</div>
+      <input class="score-inp" type="time" id="m5_${i}">
+      <div style="font-size:10px;color:var(--orange);text-align:center" id="m5_p_${i}"></div>
+    </div>`;
+  });
+  html+=`</div>
+  <div id="m5_preview" style="margin-bottom:12px"></div>
+  <button class="btn-primary" onclick="calcM5()">🔢 자동 계산 후 저장</button>`;
+  return html;
+}
+
+window.calcM5 = function() {
+  const actualVal=document.getElementById('m5_actual').value;
+  if(!actualVal){showToast('실제 도착 시간을 입력해주세요!');return;}
+  const toMin=t=>{const [h,m]=t.split(':').map(Number);return h*60+m;};
+  const actual=toMin(actualVal);
+  const diffs={};
+  TEAM_NAMES.forEach((_,i)=>{
+    const v=document.getElementById('m5_'+i).value;
+    if(v) diffs[i]=Math.abs(toMin(v)-actual);
+  });
+  if(Object.keys(diffs).length===0){showToast('예상 시간을 입력해주세요!');return;}
+  const sorted=Object.entries(diffs).sort((a,b)=>a[1]-b[1]);
+  const rm={};
+  let pos=1;
+  sorted.forEach(([i,d],idx)=>{
+    if(idx>0&&d===sorted[idx-1][1]){ rm[Object.keys(rm)[Object.keys(rm).length-1]].push(parseInt(i)); }
+    else { rm[pos]=[parseInt(i)]; }
+    pos=idx+2;
+  });
+  const scoreMap=ranksToScores(rm);
+  let prev='<div style="font-size:11px;color:var(--muted);margin-bottom:6px">계산 결과 (차이 적을수록 높은 점수):</div>';
+  sorted.forEach(([i,d])=>{
+    const h=Math.floor(d/60), m=d%60;
+    const diff=h>0?`${h}시간 ${m}분`:` ${m}분`;
+    prev+=`<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border)">
+      <span>${TEAM_NAMES[i]}</span><span style="color:var(--orange)">차이 ${diff} → <span style="font-weight:700">${scoreMap[i]??1}점</span></span></div>`;
+  });
+  document.getElementById('m5_preview').innerHTML=prev;
+  saveScores(5, scoreMap);
+};
+
+window.renderScoreInputs = function() {
+  const mId=parseInt(document.getElementById('missionSelect').value);
+  const cont=document.getElementById('scoreInputs');
+  if(!mId){cont.innerHTML='';return;}
+  const renderers={1:renderM1, 2:renderM2, 3:renderM3, 4:renderM4, 5:renderM5};
+  if(mId===6){
+    cont.innerHTML=`<div style="text-align:center;padding:16px;color:var(--muted);font-size:13px">토너먼트 탭에서 자동 계산됩니다 ✂️</div>`;
+    return;
+  }
+  cont.innerHTML = renderers[mId] ? renderers[mId]() : '';
 };
 window.resetAllScores = function(){
   if(!confirm('정말 전체 점수를 초기화할까요?'))return;
